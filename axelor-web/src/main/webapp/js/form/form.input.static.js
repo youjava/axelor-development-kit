@@ -24,17 +24,12 @@ var popoverElem = null;
 var popoverTimer = null;
 
 function canDisplayPopover(scope, details) {
-	var mode = axelor.config['application.mode'];
-	var tech = axelor.config['user.technical'];
-	
 	if (axelor.device.mobile) {
 		return false;
 	}
-
-	if(mode == 'prod' && !tech) {
+	if(!axelor.config['user.technical']) {
 		return details ? false : scope.field && scope.field.help;
 	}
-
 	return true;
 }
 
@@ -191,7 +186,7 @@ function setupPopover(scope, element, getHelp, placement) {
 			element.trigger('mouseenter.popover', true);
 		}, e.ctrlKey ? 0 : 1000);
 	});
-	element.on('mouseleave.help.setup', function () {
+	element.on('mouseleave.help.setup $destroy', function () {
 		if (timer) {
 			clearTimeout(timer);
 			timer = null;
@@ -240,15 +235,15 @@ ui.directive('uiHelpPopover', function() {
 			text = text.replace(/\\n/g, '<br>');
 			addRow(null, text, 'help-text');
 		}
-
-		if (text) {
-			addRow(null, '<hr noshade>', 'help-text');
-		}
 		
 		if(!canDisplayPopover(scope, true)) {
 			return;
 		}
-		
+
+		if (text) {
+			addRow(null, '<hr noshade>', 'help-text');
+		}
+
 		var model = scope._model;
 		if (model === field.target) {
 			model = scope._parentModel || scope.$parent._model;
@@ -345,29 +340,23 @@ ui.formItem('Label', {
 		if (field && field.help && axelor.config['user.noHelp'] !== true) {
 			element.addClass('has-help');
 		}
-
-		if (field.translatable) {
-			var icon = $("<i class='fa fa-flag'></i>").attr('title', _t('Show translations.')).appendTo(element);
-			var toggle = function () {
-				icon.toggle(!scope.$$readonlyOrig);
-			};
-			
-			scope.$watch("$$readonlyOrig", toggle);
-			scope.$on("on:new", toggle);
-			scope.$on("on:edit", toggle);
-		}
 	},
 
 	template:
-		"<label ui-translate-action><span ui-help-popover ng-transclude></span></label>"
+		"<label><span ui-help-popover ng-transclude></span></label>"
 });
 
-ui.directive('uiTranslateAction', ['$q', function ($q) {
+ui.directive('uiTranslateIcon', ['$q', function ($q) {
 	return {
 		link: function (scope, element) {
-			if (!scope.field.translatable) {
-				return;
-			}
+			var icon = $("<i class='fa fa-flag translate-icon'></i>").attr('title', _t('Show translations.')).appendTo(element);
+			var toggle = function () {
+				icon.toggle(!scope.$$readonlyOrig);
+			};
+
+			scope.$watch("$$readonlyOrig", toggle);
+			scope.$on("on:new", toggle);
+			scope.$on("on:edit", toggle);
 
 			var myDs = scope._dataSource;
 			var trDs = scope._dataSource._new("com.axelor.meta.db.MetaTranslation");
@@ -574,7 +563,7 @@ ui.directive('uiTranslateAction', ['$q', function ($q) {
 				}).addClass('translation-form');
 			}
 
-			element.on('click', 'i.fa-flag', function (e) {
+			icon.click(function (e) {
 				var value = scope.getValue();
 				if (value && scope.record && scope.record.id > 0) {
 					trDs.search({
@@ -583,7 +572,6 @@ ui.directive('uiTranslateAction', ['$q', function ($q) {
 					}).success(showPopup);
 				}
 			});
-			
 		}
 	};
 }]);
@@ -696,22 +684,28 @@ ui.formItem('Button', {
 			element.attr("href", field.link);
 		}
 		
-		element.tooltip({
-			html: true,
-			title: function() {
-				if (field.help) {
-					return field.help;
+		element.one('mouseover', function () {
+			element.tooltip({
+				html: true,
+				title: function() {
+					if (field.help) {
+						return field.help;
+					}
+					if (element.innerWidth() < element[0].scrollWidth) {
+						return field.title;
+					}
+				},
+				delay: { show: 1000, hide: 100 },
+				container: 'body'
+			});
+	
+			element.on("$destroy", function () {
+				var t = element.data('tooltip');
+				if (t) {
+					t.destroy();
+					t = null
 				}
-				if (element.innerWidth() < element[0].scrollWidth) {
-					return field.title;
-				}
-			},
-			delay: { show: 1000, hide: 100 },
-			container: 'body'
-		});
-
-		element.on("$destroy", function () {
-			element.tooltip("destroy");
+			});
 		});
 
 		element.on("click", function(e) {
@@ -801,7 +795,9 @@ ui.formItem('InfoButton', 'Button', {
 		});
 		Object.defineProperty(scope, 'value', {
 			get: function () {
-				return scope.record ? scope.record[field.name] : "";
+				return field.currency
+					? ui.formatters.decimal(field, (scope.record || {})[field.name], scope.record)
+					: ui.formatters.$fmt(scope, field.name);
 			}
 		});
 	},

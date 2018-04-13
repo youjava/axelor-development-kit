@@ -174,9 +174,73 @@ ui.directive('uiShow', function() {
 		link: function link(scope, element, attrs) {
 			scope.$$shouldWatch = true;
 			scope.$watch(attrs.uiShow, function uiShowWatchAction(value){
-				element.css('display', toBoolean(value) ? '' : 'none').toggleClass('ui-hide', !toBoolean(value));
+				var val = toBoolean(value);
+				element.css({ display: val ? '' : 'none', opacity: 0 }).toggleClass('ui-hide', !val);
+				if (val) {
+					element.animate({ opacity: 1 }, 300);
+				}
 			});
 		}
+	};
+});
+
+/**
+ * This directive is used by view-pane to attach/detach element from DOM tree
+ */
+ui.directive('uiAttach', function () {
+	return function (scope, element, attrs) {
+		var parent = null;
+		var uiAttachWatch = function uiAttachWatch(attach) {
+			var result = toBoolean(attach);
+			if (result) {
+				if (parent) {
+					element.appendTo(parent);
+					parent = null;
+					scope.$broadcast('dom:attach');
+				}
+			} else {
+				parent = element.parent();
+				scope.$broadcast('dom:detach');
+				element.detach();
+			}
+		};
+
+		uiAttachWatch.uiAttachWatch = true;
+
+		scope.$watch(attrs.uiAttach, uiAttachWatch, true);
+		scope.$on('$destroy', function () {
+			if (parent) {
+				parent = null;
+				element.remove();
+			}
+		});
+	};
+});
+
+/**
+ * This directive can be used by widget to restore scroll when element is re-attached to DOM tree.
+ */
+ui.directive('uiAttachScroll', function () {
+	return function (scope, element, attrs) {
+		setTimeout(function () {
+			var elem = element;
+			var scrollTop = 0;
+	
+			if (attrs.uiAttachScroll) {
+				elem = element.find(attrs.uiAttachScroll);
+			}
+
+			elem.on('scroll', function () {
+				scrollTop = this.scrollTop;
+			});
+
+			function resetScroll() {
+				elem.scrollTop(scrollTop);
+			};
+
+			scope.$on('dom:attach', resetScroll);
+			scope.$on('tab:select', resetScroll);
+		}, 300);
 	};
 });
 

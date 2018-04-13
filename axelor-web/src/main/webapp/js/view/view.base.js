@@ -421,14 +421,20 @@ ui.directive('uiViewPane', function() {
 				return 'partials/views/' + template + '.html';
 			};
 
-			$scope.switchTo((params.viewType || params.type));
+			var type = params.viewType || params.type;
+			$scope.keepAttached = $scope._isPopup || (params.params||{}).popup || type === 'html';
+			$scope.switchTo(type);
 		}],
 		link: function(scope, element, attrs) {
 		
 		},
 		template:
-			"<div class='view-pane'>" +
-				"<div class='view-container' ng-repeat='type in viewList' ui-show='type == viewType' ng-include='viewTemplate(type)'></div>" +
+			"<div class='view-pane' ui-attach='keepAttached || tab.selected'>" +
+				"<div class='view-container'" +
+				" ng-repeat='type in viewList'" +
+				" ui-show='type === viewType'" +
+				" ui-attach-scroll ui-attach='keepAttached || type == viewType'" +
+				" ng-include='viewTemplate(type)'></div>" +
 			"</div>"
 	};
 });
@@ -468,6 +474,10 @@ ui.directive('uiViewPopup', function() {
 				var tab = $scope.tab,
 					params = tab.params || {},
 					parent = tab.$popupParent;
+
+				while (parent && parent.$$destroyed && parent.tab) {
+					parent = parent.tab.$popupParent;
+				}
 				if (parent && parent.reload && params.popup === "reload") {
 					parent.reload();
 				}
@@ -479,7 +489,7 @@ ui.directive('uiViewPopup', function() {
 				if (!viewScope.onSave || (!viewScope.isDirty() && viewScope.id)) {
 					return $scope.onOK();
 				}
-				return viewScope.onSave().then(function(record, page) {
+				return viewScope.onSave({ fireOnLoad: false }).then(function(record, page) {
 					viewScope.edit(record);
 					viewScope.$timeout($scope.onOK.bind($scope));
 				});
@@ -497,6 +507,12 @@ ui.directive('uiViewPopup', function() {
 			});
 
 			scope.waitForActions(function () {
+				if (scope._viewParams.viewType === 'html') {
+					scope.viewTitle = scope.tabTitle(scope._viewParams);
+					scope._doShow();
+					return;
+				}
+				
 				var unwatch = scope.$watch("_viewParams.$viewScope.schema.loaded", function viewLoadedWatch(loaded) {
 					if (!loaded) {
 						return;
@@ -600,6 +616,10 @@ ui.directive('uiViewCustomize', ['NavService', function(NavService) {
 				var view = viewScope && viewScope.schema;
 				return view && view.modelId;
 			}
+			
+			scope.hasActionID = function () {
+				return scope.selectedTab.actionId;
+			}
 
 			scope.onShowView = function () {
 				var id = scope.hasViewID();
@@ -622,6 +642,14 @@ ui.directive('uiViewCustomize', ['NavService', function(NavService) {
 					state: id
 				});
 			}
+			
+			scope.onShowAction = function () {
+				var id = scope.hasActionID();
+				NavService.openTabByName("form::com.axelor.meta.db.MetaAction", {
+					mode: "edit",
+					state: id
+				});
+			}
 		},
 		replace: true,
 		template:
@@ -633,6 +661,7 @@ ui.directive('uiViewCustomize', ['NavService', function(NavService) {
 					"<ul class='dropdown-menu pull-right'>" +
 						"<li><a ng-click='onShowView()' ng-show='hasViewID()'>View...</a></li>" +
 						"<li><a ng-click='onShowModel()' ng-show='hasModelID()'>Model...</a></li>" +
+						"<li><a ng-click='onShowAction()' ng-show='hasActionID()'>Action...</a></li>" +
 					"</ul>" +
 				"</li>" +
 			"</ul>"
@@ -644,12 +673,17 @@ function viewSwitcher(scope, element, attrs) {
 	var params = (scope._viewParams || scope.tab);
 	var viewTypes = _.pluck(params.views, 'type');
 
+	if ((params.viewType || params.type) === 'dashboard') {
+		element.hide();
+		return;
+	}
+
 	element.find("[x-view-type]").click(function(e) {
 		if (this.disabled) {
 			return;
 		}
 		var type = $(this).attr("x-view-type");
-		var vs = scope.selectedTab.$viewScope;
+		var vs = params.$viewScope || scope.selectedTab.$viewScope;
 		var ds = vs._dataSource;
 		var page = ds && ds._page;
 
@@ -695,7 +729,7 @@ ui.directive('uiViewSwitcher', function(){
 		  	'<div class="btn-group">'+
 		  		'<button class="btn" x-view-type="grid"><i class="fa fa-list"></i></button>'+
 				'<button class="btn" x-view-type="cards"><i class="fa fa-th-large"></i></button>'+
-				'<button class="btn" x-view-type="kanban"><i class="fa fa-th-large"></i></button>'+
+				'<button class="btn" x-view-type="kanban"><i class="fa fa-columns"></i></button>'+
 		  		'<button class="btn" x-view-type="calendar"><i class="fa fa-calendar"></i></button>'+
 		  		'<button class="btn" x-view-type="gantt"><i class="fa fa-calendar"></i></button>'+
 		  		'<button class="btn" x-view-type="chart"><i class="fa fa-bar-chart-o"></i></button>'+

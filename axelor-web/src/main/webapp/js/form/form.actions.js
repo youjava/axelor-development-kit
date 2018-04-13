@@ -292,6 +292,9 @@ ActionHandler.prototype = {
 			viewParams = scope._viewParams || {};
 		
 		context = _.extend({}, viewParams.context, context);
+		if (context._model === undefined) {
+			context._model = scope._model;
+		}
 
 		// include button name as _signal (used by workflow engine)
 		if (this.element.is("button,a.button-item,li.action-item")) {
@@ -622,7 +625,12 @@ ActionHandler.prototype = {
 		}
 
 		var model = context._model || scope._model;
-		var promise = this.ws.action(action, model, context).then(function(response){
+		var data =  scope.getActionData ? scope.getActionData(context) : null;
+		if (data && context._signal) {
+			data._signal = context._signal;
+		}
+
+		var promise = this.ws.action(action, model, context, data).then(function(response){
 			var resp = response.data,
 				data = resp.data || [];
 			if (resp.errors) {
@@ -656,7 +664,7 @@ ActionHandler.prototype = {
 
 		function doReload(pending) {
 			self._invalidateContext = true;
-			var promise = rootScope.reload();
+			var promise = _.isFunction(rootScope.reload) ? rootScope.reload() : scope.reload();
 			if (promise) {
 				promise.then(function(){
 					deferred.resolve(pending);

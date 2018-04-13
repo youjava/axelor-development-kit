@@ -171,13 +171,8 @@ public class ContextHandler<T> {
 		throw new IllegalArgumentException("Invalid collection item for field: " + property.getName());
 	}
 	
-	private void validate(Property property) {
-		if (property == null
-				|| validated.contains(property.getName())
-				|| !values.containsKey(property.getName())) {
-			return;
-		}
-		Object value = values.get(property.getName());
+	Object validate(Property property, Object value) {
+		if (property == null) { return value; }
 		if (property.isCollection() && value instanceof Collection) {
 			value = ((Collection<?>) value).stream()
 					.map(item -> createOrFind(property, item))
@@ -185,7 +180,17 @@ public class ContextHandler<T> {
 		} else if (property.isReference()) {
 			value = createOrFind(property, value);
 		}
+		return value;
+	}
 
+	private void validate(Property property) {
+		if (property == null
+				|| validated.contains(property.getName())
+				|| !values.containsKey(property.getName())) {
+			return;
+		}
+
+		final Object value = validate(property, values.get(property.getName()));
 		final Object bean = getUnmanagedEntity();
 
 		Mapper mapper = beanMapper;
@@ -209,13 +214,14 @@ public class ContextHandler<T> {
 
 		for (String name : depends) {
 			final Property property;
+			final Object managed;
 			if (validated.contains(name) || (property = beanMapper.getProperty(name)) == null) {
 				continue;
 			}
 			if (values.containsKey(name)) {
 				validate(property);
-			} else {
-				beanMapper.set(getUnmanagedEntity(), name, property.get(getManagedEntity()));
+			} else if ((managed = getManagedEntity()) != null) {
+				beanMapper.set(getUnmanagedEntity(), name, property.get(managed));
 			}
 		}
 
@@ -226,6 +232,9 @@ public class ContextHandler<T> {
 	public Object interceptJsonAccess(Method method, Object[] args) throws Exception {
 		switch (method.getName()) {
 		case "get":
+			if ("class".equals(args[0])) {
+				return proxy.getClass();
+			}
 		case "put":
 			final String name = (String) args[0];
 			final Method found = args.length == 2

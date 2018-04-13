@@ -316,7 +316,7 @@ function OneToManyCtrl($scope, $element, DataSource, ViewService, initCallback) 
 			var items = [];
 			angular.forEach(records, function(record){
 				var item = clone ? angular.copy(record, {}) : (record || {});
-				if (item.id == null) {
+				if (!item.id) {
 					item.id = item.$id || (item.$id = --dummyId);
 				}
 				items.push(item);
@@ -522,9 +522,20 @@ ui.formInput('OneToMany', {
 				height = +(scope.field.height) || 10;
 			var maxSize = (rowSize * height) + minSize;
 
+			var unwatch = scope.$watch('schema', function (schema) {
+				if (schema) {
+					unwatch();
+					unwatch = null;
+					if (schema.rowHeight && schema.rowHeight !== rowSize) {
+						rowSize = schema.rowHeight;
+						maxSize = (rowSize * height) + minSize
+					}
+				}
+			});
+
 			return function(value) {
 				inc = arguments[1] || inc;
-				var count = _.size(value) + inc, height = minSize;
+				var count = Math.max(_.size(value), scope.dataView.getLength()) + inc, height = minSize;
 				if (count > 0) {
 					height = (rowSize * count) + (minSize + rowSize);
 				}
@@ -1118,7 +1129,7 @@ ui.formInput('OneToManyInline', 'OneToMany', {
 			}
 		};
 		
-		setTimeout(function(){
+		scope.waitForActions(function(){
 			container = element.parents('.ui-dialog-content,.view-container').first();
 			grid.height(175).appendTo(wrapper);
 			wrapper.height(175).appendTo(container);

@@ -186,6 +186,13 @@ function DMSFileListCtrl($scope, $element) {
 		$scope._dataSource._domain = null;
 		$scope.$broadcast("on:clear-filter-silent");
 	}
+	
+	var __onShow = $scope.onShow;
+	$scope.onShow = function (viewPromise) {
+		$scope.waitForActions(function () {
+			__onShow.call($scope, viewPromise);
+		});
+	};
 
 	var __filter = $scope.filter;
 	$scope.filter = function (searchFilter) {
@@ -323,6 +330,7 @@ function DMSFileListCtrl($scope, $element) {
 				isDirectory: true
 			}
 		}, function (record) {
+			$scope.$broadcast('on:change-folders', [record]);
 		});
 	};
 
@@ -371,11 +379,24 @@ function DMSFileListCtrl($scope, $element) {
 
 		function rename(record, done) {
 			var rec = _.pick(record, ['id', 'version', 'fileName']);
-			var promise = $scope._dataSource.save(rec);
+			var ds = $scope._dataSource;
+
+			if (record === $scope.currentFolder) {
+				ds = ds._new(ds._model);
+			}
+
+			var promise = ds.save(rec);
 			promise.then(done, done);
 			promise.success(function (res) {
 				record.version = res.version;
-				$scope.reload();
+				var folder = $scope.folders[record.id];
+				if (folder) {
+					folder.version = record.version;
+					folder.fileName = record.fileName;
+				}
+				if ($scope._dataSource === ds) {
+					$scope.reloadNoSync();
+				}
 			});
 		}
 	};
@@ -403,21 +424,33 @@ function DMSFileListCtrl($scope, $element) {
 	};
 
 	$scope.onMoveFiles = function (files, toFolder) {
-		if (_.isEmpty(files)) { return; }
-		_.each(files, function (item) {
+		var items = files || [];
+		if (items.length === 0) {
+			return;
+		}
+
+		items = items.map(function (item) {
+			var res = _.extend({}, item);
 			if (toFolder && toFolder.id) {
-				item.parent = {
+				res.parent = {
 					id: toFolder.id
 				};
 			} else {
-				item.parent = null;
+				res.parent = null;
 			}
-			$scope.addRelatedValues(item, toFolder);
+			// reset related record
+			res.relatedId = null;
+			res.relatedModel = null;
+			return res;
 		});
+		
+		var folders = items.filter(function (item) { return item.isDirectory; });
 
-		$scope._dataSource.saveAll(files)
-		.success(function (records) {
-			$scope.reloadNoSync();
+		$scope._dataSource.saveAll(items).success(function (records) {
+			$scope.$broadcast('on:change-folders', folders);
+			setTimeout(function () {
+				$scope.reloadNoSync();
+			});
 		});
 	};
 
@@ -977,8 +1010,9 @@ function DmsFolderTreeCtrl($scope, DataSource) {
 
 	$scope.sync = function () {
 		return ds.search({
-			fields: ["fileName", "parent.id", "relatedId", "relatedModel"],
+			fields: ["fileName", "parent.id"],
 			domain: getDomain(),
+			context: { _populate: false },
 			limit: -1
 		}).success(syncFolders);
 	};
@@ -1104,10 +1138,46 @@ ui.directive("uiDmsFolders", function () {
 
 			scope._dataSource.on("on:save", function (e) {
 				syncHome(scope._dataSource.at(0));
-				return scope.sync();
 			});
-			scope._dataSource.on("on:remove", function () {
-				return scope.sync();
+
+			scope._dataSource.on("on:remove", function (e, records) {
+				var ids = _.pluck(records, 'id');
+				records
+					.filter(function (record) { return record.id in scope.folders })
+					.forEach(function (record) {
+						var found = scope.folders[record.id];
+						var parent = scope.folders[(found.parent||{}).id] || _.first(scope.rootFolders);
+						if (parent) {
+							parent.nodes = _.filter(parent.nodes, function (node) {
+								return ids.indexOf(node.id) === -1;
+							});
+						}
+						delete scope.folders[record.id];
+					});
+			});
+			
+			scope.$on('on:change-folders', function (e, folders) {
+				// first remove from old parent
+				folders.forEach(function (record) {
+					var found = scope.folders[record.id];
+					var parent = scope.folders[((found||{}).parent||{}).id] || _.first(scope.rootFolders);
+					if (parent) {
+						parent.nodes = _.filter(parent.nodes, function (node) {
+							return node.id !== record.id;
+						});
+					}
+				});
+				// and add to new parent
+				folders.forEach(function (record) {
+					var found = scope.folders[record.id] || (scope.folders[record.id] = record);
+					var oldParent = found.parent;
+					var newParent = scope.folders[(record.parent||{}).id] || _.first(scope.rootFolders);
+					if (found && oldParent !== newParent) {
+						newParent.nodes.push(found);
+						found.parent = newParent;
+					}
+					found.nodes = found.nodes || [];
+				});
 			});
 
 			scope.sync();
@@ -1172,9 +1242,9 @@ ui.directive("uiDmsTreeNode", function () {
 ui.directive("uiDmsTree", ['$compile', function ($compile) {
 
 	var template = "" +
-	"<li ng-repeat='node in nodes' ng-class='{empty: !node.nodes.length}' class='dms-tree-folder'>" +
+	"<li ng-repeat='node in nodes | limitTo: limit as items track by node.id' ng-class='{empty: !node.nodes.length}' class='dms-tree-folder'>" +
 		"<a x-node='node' ui-dms-tree-node></a>" +
-		"<ul ng-show='node.open' x-handler='handler' x-nodes='node.nodes' ui-dms-tree></ul>" +
+		"<ul ng-if='node.open' x-handler='handler' x-nodes='node.nodes' ui-dms-tree></ul>" +
 	"</li>";
 
 	return {
@@ -1183,6 +1253,40 @@ ui.directive("uiDmsTree", ['$compile', function ($compile) {
 			handler: "="
 		},
 		link: function (scope, element, attrs) {
+			
+			var maxNodes = 40;
+			var elemMore = null;
+
+			scope.limit = maxNodes;
+
+			function loadMore() {
+				scope.$applyAsync(function () {
+					scope.limit = Math.min(scope.nodes.length, scope.limit + maxNodes);
+					showMore();
+				});
+			}
+
+			function showMore() {
+				var hasMore = scope.limit < scope.nodes.length;
+				if (elemMore === null) {
+					var a = $("<a href='javascript:'></a>").append($("<span class='title'>").text(_t('load more') + '...'));
+					elemMore = $("<li class='dms-tree-more'>").append(a).appendTo(element);
+					elemMore.on('click', 'a', loadMore);
+				}
+				if (!hasMore) {
+					elemMore.remove();
+					elemMore = null;
+				}
+			}
+
+			var unwatch = scope.$watch('nodes.length', function (n) {
+				if (n === 0) {
+					return;
+				}
+				unwatch();
+				showMore();
+			});
+
 			var handler = scope.handler;
 
 			scope.onClick = function (e, node) {

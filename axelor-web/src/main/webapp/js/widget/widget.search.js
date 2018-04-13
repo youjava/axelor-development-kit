@@ -188,7 +188,7 @@ ui.directive('uiFilterItem', function() {
 				if (_.isEmpty(fields)) return;
 				unwatch();
 				var options = _.values(fields);
-				scope.options = _.sortBy(options, 'title');
+				scope.options = _.sortBy(options, function (x) { return (x.title||'').toLowerCase(); });
 			}, true);
 		},
 		template:
@@ -436,7 +436,7 @@ ui.directive('uiFilterContext', function () {
 						contextFields[name] = fields[name];
 					}
 				}
-				$scope.contextFields = _.sortBy(_.values(contextFields), 'title');
+				$scope.contextFields = _.sortBy(_.values(contextFields), function (x) { return (x.title||'').toLowerCase(); });
 				$scope.remove();
 			};
 		}],
@@ -494,7 +494,7 @@ function FilterFormCtrl($scope, $element, ViewService) {
 			// include json fields
 			_.each(jsonFields, function (fields, prefix) {
 				_.each(fields, function (field, name) {
-					if (field.type === 'many-to-many') return;
+					if (['button', 'panel', 'separator', 'many-to-many'].indexOf(field.type) > -1) return;
 					var key = prefix + '.' + name;
 					if (field.type !== 'many-to-one') {
 						key += '::' + (field.jsonType || 'text');
@@ -1160,7 +1160,7 @@ ui.directive('uiFilterBox', function() {
 						return filter;
 					}
 					var name = filter.fieldName;
-					var type = ($scope.fields[filter.fieldName]||{}).type;
+					var type = (($scope.fields||$scope.$parent.fields||{})[filter.fieldName]||{}).type;
 
 					var v1 = filter.value;
 					var v2 = filter.value2;
@@ -1346,7 +1346,7 @@ ui.directive('uiFilterBox', function() {
 					return;
 				}
 				toggleButton = $(e.currentTarget);
-				menu.zIndex(element.zIndex() + 1);
+				menu.zIndex(element.parent().zIndex() + 1);
 				menu.show();
 				scope.doAdjust();
 
@@ -1432,9 +1432,9 @@ ui.directive('uiFilterBox', function() {
 			
 			scope.findCols = function () {
 				var grid = element.parents('.grid-view:first').children('[ui-slick-grid]:first').data('grid');
-				return grid ? _.pluck(grid.getColumns(), 'field').filter(function (n) {
-					return n in scope.$parent.fields;
-				}) : [];
+				return grid
+					? _.pluck(grid.getColumns(), 'field').filter(function (n) { return n in scope.$parent.fields; })
+					: _.pluck(scope.$parent.fields, 'name');
 			};
 
 			scope.handler.$watch('schema.freeSearch', function searchFreeSearchWatch(value, old) {

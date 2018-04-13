@@ -35,6 +35,7 @@ String appName = settings.get("application.name", "My App");
 String appDesc = settings.get("application.description", null);
 String appHome = settings.get("application.home", "");
 String appLogo = info.getLogo();
+String appStyle = info.getStyle();
 String appAuthor = settings.get("application.author", "");
 String appTheme = info.getTheme();
 String appMenu = settings.get("application.menu", "both");
@@ -79,11 +80,11 @@ String tenantId = (String) session.getAttribute("tenantId");
     <% if (appTheme != null) { %>
     <link href="css/<%= appTheme %>/theme.css" rel="stylesheet">
     <% } %>
-    <!-- Le HTML5 shim, for IE6-8 support of HTML5 elements -->
-    <!--[if lt IE 9]>
-    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]-->
-
+    <% if (appStyle != null) { %>
+    <style>
+    <%= appStyle %>
+    </style>
+    <% } %>
     <!-- Le fav and touch icons -->
     <link rel="shortcut icon" href="ico/favicon.ico">
     <% if (extraHead != null) { %> <jsp:include page="<%= extraHead %>" /> <% } %>

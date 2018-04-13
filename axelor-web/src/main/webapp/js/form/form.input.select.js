@@ -165,6 +165,10 @@ ui.formWidget('BaseSelect', {
 				},
 				
 				select: function(event, ui) {
+					// do not select with tab key, to prevent unexpected result on editable grid
+					if (event.keyCode === 9) {
+						return false;
+					}
 					var ret = scope.handleSelect(event, ui);
 					if (ret !== undefined) {
 						return ret;
@@ -185,7 +189,10 @@ ui.formWidget('BaseSelect', {
 	
 			input.data('ui-autocomplete')._renderItem = scope.renderSelectItem || renderItem;
 
-			scope.$onAdjust('size scroll', function () {
+			scope.$onAdjust('size scroll', function (e) {
+				if (e.type === 'adjust:size' && e.target !== document) {
+					return;
+				}
 				if (showing) {
 					input.autocomplete('close');
 				}
@@ -865,6 +872,7 @@ ui.formInput('NavSelect', {
 			elemMenu = element.children('.nav-steps').children('li.dropdown');
 			elemMenuTitle = elemMenu.find('a.nav-label > span');
 			elemMenuItems = elemMenu.find('li');
+			adjust();
 		}
 
 		var setMenuTitle = (function() {
@@ -925,7 +933,9 @@ ui.formInput('NavSelect', {
 		}
 
 		scope.$onAdjust(adjust);
-		scope.$timeout(setup);
+		scope.$callWhen(setup, function () {
+			return element.is(':visible');
+		});
 	},
 	template_editable: null,
 	template_readonly: null,

@@ -145,14 +145,24 @@ table.form-layout td.form-item > *,
 	width: 100%;
 }
 
-.form-item > label.translatable > i.fa-flag {
-	float: right;
-	line-height: 18px;
+.form-item-container > .translate-icon {
+	position: absolute;
+	right: 0;
+	width: auto;
+	line-height: 28px;
 	padding: 0 4px;
+	cursor: pointer;
+}
+
+.form-item-container.html-item > .translate-icon {
+	z-index: 1;
+}
+.form-item-container.html-item.readonly > .translate-icon {
+	display: none !important;
 }
 
 table.form-layout td.form-item.v-align-top {
-	vertical-align: top;	
+	vertical-align: top;
 }
 
 .form-item-container,
@@ -163,6 +173,7 @@ table.form-layout td.form-item.v-align-top {
 
 .form-item-container {
 	min-width: 26px;
+	position: relative;
 }
 
 .form-item-container > span.display-text {
@@ -728,6 +739,18 @@ table.field-details .help-text hr {
 	max-width: 480px;
 	min-width: 220px;
 	z-index: 2147483647;
+	border: 1px solid rgba(0, 0, 0, 0.1);
+	box-shadow: 0 5px 10px rgba(0, 0, 0, 0.2);
+	padding: 0;
+}
+
+.popover,
+.popover-title {
+	border-radius: 0;
+}
+
+.popover-title {
+	font-weight: 600;
 }
 
 .popover-inner {
@@ -746,10 +769,11 @@ table.field-details .help-text hr {
 .popover .field-details code {
 	display: block;
 	white-space: pre-wrap;
-	max-width: 300px;
+	max-width: 450px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	font-size: 12px;
+	border-radius: 0;
 }
 
 .popover.bottom {

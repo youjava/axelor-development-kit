@@ -106,6 +106,7 @@ function FormViewCtrl($scope, $element) {
 	$scope.record = {};
 	$scope.$$original = null;
 	$scope.$$dirty = false;
+	$scope.$$dirtyGrids = [];
 	
 	$scope.$events = {};
 	
@@ -237,6 +238,14 @@ function FormViewCtrl($scope, $element) {
 		if (locationChangeOff) {
 			return;
 		}
+		
+		var tab = $scope.selectedTab || {};
+		var params = $scope._viewParams;
+		
+		if (tab !== params) {
+			return;
+		}
+
 		locationChangeOff = $scope.$on("$locationChangeStart", function (event, newUrl, oldUrl) {
 			// block navigation if popup is open
 			var hasDialogs = $('body .ui-dialog:visible').length > 0;
@@ -245,8 +254,6 @@ function FormViewCtrl($scope, $element) {
 				return;
 			}
 
-			var tab = $scope.selectedTab || {};
-			var params = $scope._viewParams;
 			var $location = $scope.$location;
 
 			function resetForm() {
@@ -396,8 +403,18 @@ function FormViewCtrl($scope, $element) {
 		return ui.prepareContext(ds._model, context, dummy);
 	};
 
+	$scope.$dirtyGrid = function (gridId, dirty) {
+		var i = $scope.$$dirtyGrids.indexOf(gridId);
+		if (dirty && i === -1) {
+			$scope.$$dirtyGrids.push(gridId);
+		} else if (!dirty && i > -1) {
+			$scope.$$dirtyGrids.splice(i, 1);
+		}
+		return $scope.isDirty();
+	};
+
 	$scope.isDirty = function() {
-		$scope.$$dirty = !ds.equals($scope.record, $scope.$$original);
+		$scope.$$dirty = $scope.$$dirtyGrids.length > 0 || !ds.equals($scope.record, $scope.$$original);
 		return $scope.$$dirty;
 	};
 
@@ -685,10 +702,10 @@ function FormViewCtrl($scope, $element) {
 
 	$scope.onSave = function(options) {
 		
-		var opts = _.extend({}, options);
+		var opts = _.extend({ fireOnLoad: true }, options);
 		var defer = $scope._defer();
 		var saveAction = $scope.$events.onSave;
-		var fireOnLoad = true;
+		var fireOnLoad = opts.fireOnLoad;
 		
 		function fireBeforeSave() {
 			var event = $scope.$broadcast('on:before-save', $scope.record);
@@ -720,6 +737,7 @@ function FormViewCtrl($scope, $element) {
 			
 			values = ds.diff(values, $scope.$$original);
 			promise = ds.save(values).success(function(record, page) {
+				$scope.$$dirtyGrids.length = 0;
 				return doEdit(record.id, dummy, fireOnLoad);
 			});
 
@@ -1028,7 +1046,7 @@ function FormViewCtrl($scope, $element) {
 			}
 		}, {
 			visible: function () {
-				return $scope.canArchive();
+				return $scope.canArchive() || $scope.canUnarchive();
 			},
 		}, {
 			title: _t('Archive'),
@@ -1047,7 +1065,7 @@ function FormViewCtrl($scope, $element) {
 				return $scope.canUnarchive();
 			},
 			visible: function () {
-				return $scope.canArchive();
+				return $scope.canUnarchive();
 			},
 			click: function(e) {
 				$scope.onUnarchive();
@@ -1067,7 +1085,7 @@ function FormViewCtrl($scope, $element) {
 		if (action === "save") {
 			if (!$scope.canSave()) {
 				$scope.showErrorNotice();
-			} else {
+			} else if ($scope.hasButton('save')) {
 				$(e.target).blur().focus();
 				$scope.onSave();
 			}
@@ -1258,7 +1276,11 @@ ui.formBuild = function (scope, schema, fields) {
 			if (/button|group|tabs|tab|separator|spacer|static|static-label/.test(type)) {
 				item.attr('x-show-title', false);
 			}
-		
+			
+			if (attrs.translatable && (attrs.serverType === 'string' || attrs.serverType === 'text')) {
+				item.attr('ui-translate-icon', '');
+			}
+
 			var items = this.items || this.pages;
 			if (items && this.type != 'panel-related') {
 				process(items, item);
@@ -1380,8 +1402,8 @@ ui.directive('uiViewForm', ['$compile', 'ViewService', function($compile, ViewSe
 
 		scope.$on("on:form-show", function () {
 			setTimeout(function () {
-				element.scrollTop(0);
-			});
+				element.animate({ scrollTop: 0 }, 200);
+			}, 300);
 		});
 
 		var unwatch = scope.$watch('schema.loaded', function formSchemaWatch(viewLoaded){

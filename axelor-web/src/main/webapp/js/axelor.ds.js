@@ -171,11 +171,19 @@
 
 			if (meta.jsonAttrs && view && view.items) {
 				if (view.type === 'grid') {
-					view.items.push({
-						type: 'field',
-						name: 'attrs',
-						jsonFields: meta.jsonAttrs
-					});
+					view.items = (function (items) {
+						var button = _.findWhere(items, { type: 'button' });
+						var index = items.indexOf(button);
+						if (index < 0) {
+							index = items.length;
+						}
+						items.splice(index, 0, {
+							type: 'field',
+							name: 'attrs',
+							jsonFields: meta.jsonAttrs
+						});
+						return items;
+					})(view.items);
 				}
 				if (view.type === 'form') {
 					view.items.push({
@@ -531,6 +539,10 @@
 				items.push(view.columnBy);
 				items.push(view.sequenceBy);
 			}
+			
+			if (view.type === "gantt") {
+				items.push(view.taskUser);
+			}
 
 			return result;
 		}
@@ -746,17 +758,13 @@
 			return $q.defer();
 		};
 
-		ViewService.prototype.action = function(action, model, context) {
-
-			var ctx = _.extend({
-				_model: model
-			}, context);
+		ViewService.prototype.action = function(action, model, context, data) {
 
 			var params = {
 				model: model,
 				action: action,
-				data: {
-					context: ctx
+				data: data || {
+					context: _.extend({ _model: model }, context)
 				}
 			};
 

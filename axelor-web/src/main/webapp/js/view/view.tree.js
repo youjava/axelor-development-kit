@@ -238,24 +238,15 @@ function Column(scope, col) {
 
 			return res.title;
 		}
-		switch(col.type) {
-		case 'datetime':
-			return value ? moment(value).format('DD/MM/YYYY HH:mm') : "";
-		case 'date':
-			return value ? moment(value).format('DD/MM/YYYY') : "";
-		case 'reference':
-		case 'many-to-one':
-			if (value.name) return value.name;
-			if (value.code) return value.name;
-			for(var key in value) {
-				if (key === 'id' ||
-					key === 'version' ||
-					key.indexOf('$') === 0 ||
-					key.indexOf('_') === 0) continue;
-				return value[key] || value.id;
-			}
+		var type = col.type;
+		if (type === 'reference') {
+			type = 'many-to-one';
 		}
-		return value;
+		var fn = ui.formatters[type];
+		if (fn) {
+			value = fn(col, value, record);
+		}
+		return value === undefined || value === null ? '---' : value;
 	};
 }
 
@@ -749,7 +740,7 @@ ui.directive('uiViewTree', function(){
 			});
 		},
 		template:
-		'<div class="tree-view-container">'+
+		'<div class="tree-view-container" ui-attach-scroll="> .tree-table">'+
 			'<table class="tree-header">'+
 				'<thead>'+
 					'<tr>'+

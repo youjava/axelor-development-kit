@@ -18,10 +18,6 @@
 (function() {
 
 	"use strict";
-	
-	// create global axelor namespace exists
-	window.axelor = window.axelor || {};
-	window.axelor.config = {};
 
 	var module = angular.module('axelor.ng', []);
 
@@ -127,16 +123,17 @@
 					names = names.replace(/(\w+)/g, 'adjust:$1');
 				}
 
-				var func = wait ? _.throttle(handler, wait) : handler;
+				var func = wait ? _.debounce(handler, wait) : handler;
 
 				$(document).on(names, func);
 				this.$on('$destroy', function () {
 					$(document).off(names, func);
 				});
 			};
-
+			
 			__custom__.$new = function $new() {
 				var inst = __super__.$new.apply(this, arguments);
+
 				inst.$$watchChecker = this.$$watchChecker;
 				inst.$$watchInitialized = false;
 				inst.$$childCanWatch = true;
@@ -177,6 +174,18 @@
 						return previous(self) && checker(self);
 					};
 				}
+			};
+
+			var __super__$$apply = _.debounce(__super__.$apply, 100);
+
+			__custom__.$apply = function $apply() {
+				return arguments.length === 0
+					? __super__$$apply.apply(this)
+					: __super__.$apply.apply(this, arguments);
+			};
+
+			__custom__.$applyNow = function $applyNow() {
+				return __super__.$apply.apply(this, arguments);
 			};
 
 			angular.extend(__orig__, __custom__);

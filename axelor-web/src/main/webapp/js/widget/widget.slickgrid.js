@@ -115,7 +115,8 @@ var Editor = function(args) {
 
 		element.css('display', 'inline-block')
 			.addClass('slick-external-editor')
-			.appendTo(container);
+			.appendTo(container)
+			.hide();
 
 		if (!element.data('keydown.nav')) {
 			element.data('keydown.nav', true);
@@ -143,10 +144,6 @@ var Editor = function(args) {
 				}
 			});
 		}
-		
-		if (args.item && args.item.id > 0)
-			element.hide();
-		this.focus();
 	};
 
 	this.shouldWait = function () {
@@ -225,7 +222,8 @@ var Editor = function(args) {
 			updated = false;
 			
 		if ((!current.id || current.id < 0) && (current[column.field] === undefined)) {
-			current[column.field] = (scope.record||{})[column.field] || null;
+			var defaults = scope.$events.onNew ? scope.record : scope.defaultValues;
+			current[column.field] = (defaults||{})[column.field] || null;
 		}
 
 		var changed = (record.id !== item.id || record.version !== current.version);
@@ -289,19 +287,15 @@ var Editor = function(args) {
 var Formatters = {
 
 	"string": function(field, value, context) {
-		if (field.translatable && value && context) {
-			var key = '$t:' + field.name;
-			return context[key] || value;
-		}
-		return value;
+		return ui.formatters.string(field, value, context);
 	},
 
 	"integer": function(field, value) {
-		return value;
+		return ui.formatters.integer(field, value);
 	},
 
-	"decimal": function(field, value) {
-		return ui.formatters.decimal(field, value);
+	"decimal": function(field, value, context) {
+		return ui.formatters.decimal(field, value, context);
 	},
 	
 	"boolean": function(field, value) {
@@ -877,20 +871,17 @@ Grid.prototype.parse = function(view) {
 	
 	function adjustSize() {
 		scope.ajaxStop(function () {
-			setTimeout(function () {
+			if (element.is(':visible')) {
 				that.adjustSize();
-			});
+			}
 		});
 	}
 
 	scope.$onAdjust(adjustSize, 100); // handle global events
-	element.on('adjust:size', adjustSize); // handle element specific events
 
 	scope.$callWhen(function () {
 		return element.is(':visible');
-	}, function () {
-		return element.trigger('adjust:size');
-	}, 100);
+	}, adjustSize, 100);
 
 	element.addClass('slickgrid-empty');
 	this.doInit = _.once(function doInit() {
@@ -1249,7 +1240,7 @@ Grid.prototype._doInit = function(view) {
 		grid.invalidate();
 		grid.autosizeColumns();
 		// focus first filter input
-		if (!axelor.device.mobile) {
+		if (!axelor.device.mobile && !that.element.parent().is('.portlet-grid')) {
 			that.element
 				.find('.slick-headerrow:first input[type=text]:first')
 				.focus()
@@ -1257,6 +1248,18 @@ Grid.prototype._doInit = function(view) {
 		}
 	});
 	
+	var scrollTop;
+	this.subscribe(grid.onScroll, function (e, args) {
+		scrollTop = args.scrollTop;
+	});
+	function resetScroll() {
+		if (scrollTop) {
+			that.element.children('.slick-viewport').scrollTop(scrollTop);
+		}
+	}
+	scope.$on('dom:attach', resetScroll);
+	scope.$on('tab:select', resetScroll);
+
 	var onColumnsResized = false;
 	this.subscribe(grid.onColumnsResized, function (e, args) {
 		onColumnsResized = true;
@@ -1670,7 +1673,7 @@ Grid.prototype.onKeyDown = function(e, args) {
 	}
 };
 
-Grid.prototype.isCellEditable = function(cell) {
+Grid.prototype.isCellEditable = function(row, cell) {
 	var cols = this.grid.getColumns(),
 		col = cols[cell];
 	if (!col || col.id === "_edit_column" || col.id === "_move_column" || col.id === "_checkbox_selector") {
@@ -1685,11 +1688,15 @@ Grid.prototype.isCellEditable = function(cell) {
 	if (!form) {
 		return !field.readonly;
 	}
-
-	var item = this.element.find('[x-field=' + field.name + ']:first');
-	if (item.length) {
-		return !item.scope().isReadonly();
+	
+	var current = this.grid.getActiveCell();
+	if (current && current.row === row) {
+		var item = this.element.find('[x-field=' + field.name + ']:first');
+		if (item.length) {
+			return !item.scope().isReadonly();
+		}
 	}
+
 	return !field.readonly;
 };
 
@@ -1698,7 +1705,7 @@ Grid.prototype.findNextEditable = function(posY, posX) {
 		cols = grid.getColumns(),
 		args = {row: posY, cell: posX + 1};
 	while (args.cell < cols.length) {
-		if (this.isCellEditable(args.cell)) {
+		if (this.isCellEditable(args.row, args.cell)) {
 			return args;
 		}
 		args.cell += 1;
@@ -1708,7 +1715,7 @@ Grid.prototype.findNextEditable = function(posY, posX) {
 	}
 	args.cell = 0;
 	while (args.cell <= posX) {
-		if (this.isCellEditable(args.cell)) {
+		if (this.isCellEditable(args.row, args.cell)) {
 			return args;
 		}
 		args.cell += 1;
@@ -1721,7 +1728,7 @@ Grid.prototype.findPrevEditable = function(posY, posX) {
 		cols = grid.getColumns(),
 		args = {row: posY, cell: posX - 1};
 	while (args.cell > -1) {
-		if (this.isCellEditable(args.cell)) {
+		if (this.isCellEditable(args.row, args.cell)) {
 			return args;
 		}
 		args.cell -= 1;
@@ -1731,7 +1738,7 @@ Grid.prototype.findPrevEditable = function(posY, posX) {
 	}
 	args.cell = cols.length - 1;
 	while (args.cell >= posX) {
-		if (this.isCellEditable(args.cell)) {
+		if (this.isCellEditable(args.row, args.cell)) {
 			return args;
 		}
 		args.cell -= 1;
@@ -1870,19 +1877,33 @@ Grid.prototype.isDirty = function(row) {
 	return false;
 };
 
+Grid.prototype.__markHandlerDirty = function () {
+	if (this.scope.handler && this.scope.handler.$dirtyGrid) {
+		this.$gid = this.$gid || _.uniqueId('grid');
+		this.scope.handler.$dirtyGrid(this.$gid, this.isDirty());
+	}
+};
+
 Grid.prototype.markDirty = function(row, field) {
 	
 	var grid = this.grid,
+		dataView = this.scope.dataView,
 		hash = grid.getCellCssStyles("highlight") || {},
 		items = hash[row] || {};
 	
 	items[field] = "dirty";
 	hash[row] = items;
+	
+	var record = dataView.getItem(row);
+	if (this.handler.$$ensureIds && record && !record.id) {
+		this.handler.$$ensureIds([record]);
+	}
 
 	grid.setCellCssStyles("highlight", hash);
 	grid.invalidateAllRows();
 	grid.render();
 
+	this.__markHandlerDirty();
 	this.__beforeSavePending = true;
 };
 
@@ -1900,6 +1921,7 @@ Grid.prototype.clearDirty = function(row) {
 	grid.invalidateAllRows();
 	grid.render();
 
+	this.__markHandlerDirty();
 	this.__beforeSavePending = false;
 };
 
@@ -2034,6 +2056,21 @@ Grid.prototype.setEditors = function(form, formScope, forEdit) {
 			}
 			item = _.extend(item, values);
 
+			// update dotted fields
+			_.filter(grid.getColumns(), function (col) {
+				return col.field && col.field.indexOf('.') > -1;
+			}).forEach(function (col) {
+				var path = col.field.split('.');
+				var val = item || {};
+				var idx = 0;
+				while (val && idx < path.length) {
+					val = val[path[idx++]];
+				}
+				if (idx === path.length && val !== undefined) {
+					item[col.field] = val;
+				}
+			});
+
 			grid.updateRowCount();
 			grid.invalidateRow(cell.row);
 			grid.render();
@@ -2041,7 +2078,7 @@ Grid.prototype.setEditors = function(form, formScope, forEdit) {
 			grid.setActiveCell(cell.row, cell.cell);
 			
 			if (editor) {
-				grid.editActiveCell();
+				grid.focus();
 			}
 		}
 	};
@@ -2099,7 +2136,7 @@ Grid.prototype.setEditors = function(form, formScope, forEdit) {
 					lock.commitCurrentEdit();
 				}
 
-				var cell = that.findNextEditable(that.grid.getDataLength() - 1, 0);
+				var cell = that.findNextEditable(that.grid.getDataLength() - 1, 0) || { row: that.grid.getDataLength(), cell: 0 };
 				that.grid.focus();
 				that.grid.setActiveCell(cell.row, cell.cell);
 				that.grid.editActiveCell();

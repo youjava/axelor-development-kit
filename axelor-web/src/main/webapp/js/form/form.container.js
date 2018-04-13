@@ -396,7 +396,7 @@ ui.formWidget('ButtonGroup', {
 		scope.$watch(adjustButtons);
 		scope.$callWhen(function () {
 			return element.is(':visible');
-		}, adjust);
+		}, adjustButtons);
 	},
 	transclude: true,
 	template_editable: null,
@@ -504,7 +504,7 @@ ui.formWidget('Panel', {
 	transclude: true,
 	template:
 		"<div class='panel panel-default'>" +
-			"<div class='panel-header' ng-show='field.title' ng-if='!notitle'>" +
+			"<div class='panel-header' ng-if='!notitle &amp;&amp; field.title'>" +
 				"<div class='panel-icon' ng-if='icon'><i class='fa' ng-class='icon'></i></div>" +
 				"<img class='panel-image' ng-if='image' ng-src='{{image}}'>" +
 				"<div class='panel-title'>{{title}}</div>" +
@@ -592,6 +592,7 @@ ui.formWidget('PanelTabs', {
 				.addClass('active');
 
 			setTimeout(function () {
+				scope.$broadcast('tab:select');
 				elemTabs.removeClass('open');
 				elemMenu.removeClass('open');
 				axelor.$adjustSize();

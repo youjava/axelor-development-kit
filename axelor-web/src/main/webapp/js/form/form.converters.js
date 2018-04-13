@@ -20,23 +20,87 @@
 	"use strict";
 
 	var ui = angular.module('axelor.ui');
+	
+	var currencySymbols = {
+		en: '\u0024',
+		fr: '\u20AC'
+	};
+	
+	var thousandSeparator = {
+		en: ',',
+		fr: ' '
+	};
+
+	function addCurrency(value, symbol) {
+		if (value && symbol) {
+			var val = '' + value;
+			if (axelor.config['user.lang'] === 'fr' ) {
+				return val.endsWith(symbol) ? val : val + ' ' + symbol;
+			}
+			return val.startsWith(symbol) ? val : symbol + val;
+		}
+		return value;
+	}
+
+	function findNested(record, name) {
+		if (record && name && name in record) {
+			return record[name];
+		}
+		if (name) {
+			var path = name.split('.');
+			var val = record || {};
+			var idx = 0;
+			while (val && idx < path.length) {
+				val = val[path[idx++]];
+			}
+			if (idx === path.length) {
+				return val;
+			}
+		}
+		return null;
+	}
+
+	// override angular.js currency filter
+	ui.filter('currency', function () {
+		return addCurrency;
+	});
+
+	function formatNumber(field, value, scale) {
+		var num = +(value);
+		if ((value === null || value === undefined) && !field.defaultValue) {
+			return value;
+		}
+		if (num === 0 || num) {
+			var lang = axelor.config['user.lang'];
+			var tsep = thousandSeparator[lang] || thousandSeparator.en;
+			return _.numberFormat(num, scale, '.', tsep);
+		}
+		return value;
+	}
 
 	ui.formatters = {
-
-		"integer": function(field, value) {
+			
+		"string": function(field, value, context) {
+			if (field.translatable && value && context) {
+				var key = '$t:' + field.name;
+				return context[key] || value;
+			}
 			return value;
 		},
 
-		"decimal": function(field, value) {
+		"integer": function(field, value) {
+			return formatNumber(field, value);
+		},
+
+		"decimal": function(field, value, context) {
 			var scale = (field.widgetAttrs||{}).scale || field.scale || 2;
-			var num = +(value);
-			if ((value === null || value === undefined) && !field.defaultValue) {
-				return value;
+			var currency = (field.widgetAttrs||{}).currency || field.currency;
+
+			var text = formatNumber(field, value, scale);
+			if (text && currency) {
+				text = addCurrency(text, findNested(context, currency));
 			}
-			if (num === 0 || num) {
-				return num.toFixed(scale);
-			}
-			return value;
+			return text;
 		},
 
 		"boolean": function(field, value) {
@@ -60,7 +124,9 @@
 		},
 
 		"many-to-one": function(field, value) {
-			return value ? value[field.targetName] : "";
+			return value
+				? (field.targetName ? value[field.targetName] : (value.name || value.code || value.id || ""))
+				: "";
 		},
 
 		"one-to-many": function(field, value) {
@@ -110,8 +176,9 @@
 		return "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 	};
 
-	ui.formatters.$fmt = function (scope, fieldName, fieldValue) {
-		var value = arguments.length === 2 ? (scope.record || {})[fieldName] : fieldValue;
+	ui.formatters.$fmt = function (scope, fieldName, fieldValue, record) {
+		var context = record || scope.record || {};
+		var value = arguments.length === 2 ? context[fieldName] : fieldValue;
 		if (value === undefined || value === null) {
 			return "";
 		}
@@ -122,7 +189,7 @@
 		var type = field.selection ? "selection" : field.type;
 		var formatter = ui.formatters[type];
 		if (formatter) {
-			return formatter(field, value);
+			return formatter(field, value, context);
 		}
 		return value;
 	};

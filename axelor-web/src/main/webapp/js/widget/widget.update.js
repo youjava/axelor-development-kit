@@ -37,8 +37,8 @@ ui.directive('uiDeleteButton', [function () {
 					"<i class='fa fa-caret-down'></i>" +
 				"</button>" +
 				"<ul class='dropdown-menu' ng-if='hasButton(\"archive\")'>" +
-					"<li><a href='' ng-click='onArchive()'>Archive</a></li>" +
-					"<li><a href='' ng-click='onUnarchive()'>Unarchive</a></li>" +
+					"<li><a href='' ng-click='onArchive()' x-translate>Archive</a></li>" +
+					"<li><a href='' ng-click='onUnarchive()' x-translate>Unarchive</a></li>" +
 				"</ul>" +
 			"</div>"
 	};
@@ -117,7 +117,7 @@ ui.directive('uiUpdateButton', ['$compile', function ($compile) {
 			});
 			
 			scope.$on('$destroy', function() {
-				$(document).on('mousedown.update-menu', onMouseDown);
+				$(document).off('mousedown.update-menu', onMouseDown);
 				if (menu) {
 					menu.remove();
 					menu = null;
@@ -197,7 +197,7 @@ ui.directive('uiUpdateForm',  function () {
 		var accept = function (field) {
 			var name = field.name;
 			if (!field.massUpdate) return;
-			if (/id|version|selected|((updated|created)(On|By))/.test(name)) return;
+			if (/^(id|version|selected|archived|((updated|created)(On|By)))$/.test(name)) return;
 			if (field.large || field.unique) return;
 			switch (field.type) {
 			case 'one-to-many':
