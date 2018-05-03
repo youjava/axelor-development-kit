@@ -14,12 +14,33 @@ input[type="url"],
 input[type="search"],
 input[type="tel"],
 input[type="color"],
-.tag-select,
+.tag-select.picker-input,
 .form-item-container > .display-text,
 .uneditable-input {
 	color: #000;
-	background-color: inherit;
 	border-color: #eee;
+}
+
+.bar-side select,
+.bar-side textarea,
+.bar-side input[type="text"],
+.bar-side input[type="password"],
+.bar-side input[type="datetime"],
+.bar-side input[type="datetime-local"],
+.bar-side input[type="date"],
+.bar-side input[type="month"],
+.bar-side input[type="time"],
+.bar-side input[type="week"],
+.bar-side input[type="number"],
+.bar-side input[type="email"],
+.bar-side input[type="url"],
+.bar-side input[type="search"],
+.bar-side input[type="tel"],
+.bar-side input[type="color"],
+.bar-side .tag-select.picker-input,
+.bar-side .form-item-container > .display-text,
+.bar-side .uneditable-input {
+	background-color: inherit;
 }
 
 [ui-nav-tree] .nav-search input[type="text"] {
@@ -81,6 +102,10 @@ label,
 .mail-message .mail-message-header .subject,
 .mail-message .track-fields li {
 	color: #8C8C8C;
+}
+
+.slick-cell .picker-icons i.fa:hover {
+	color: #000;
 }
 
 .track-fields span {
@@ -240,9 +265,13 @@ label,
 }
 
 textarea {
-	border-top: 0;
-	border-left: 0;
-	border-right: 0;
+	border-width: 0;
+	border-bottom-width: 1px;
+}
+
+.slick-external-editor textarea {
+	border-width: 1px;
+	background-color: #fff;
 }
 
 .navbar-inner,
@@ -260,6 +289,15 @@ textarea {
 [ui-view-form] select,
 [ui-view-form] .tag-select {
 	border-color: #c0c0c0;
+}
+
+.ng-invalid > input,
+.ng-invalid > textarea,
+.ng-invalid > .picker-input input,
+.ng-invalid > .ui-spinner input,
+.ng-invalid > .tag-select,
+.ng-invalid > .form-item-container > .wysiwyg-container {
+	border-color: #B94A48;	
 }
 
 .btn,

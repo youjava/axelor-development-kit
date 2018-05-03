@@ -151,6 +151,7 @@
 		// current user and group
 		evalScope.$user = axelor.config['user.login'];
 		evalScope.$group = axelor.config['user.group'];
+		evalScope.$userId = axelor.config['user.id'];
 
 		evalScope.$contains = function(iter, item) {
 			if (iter && iter.indexOf)
@@ -586,7 +587,11 @@
 			var message = _t("Internal Server Error"),
 				report = data.data || data, stacktrace = null, cause = null, exception;
 			
-			if (report.stacktrace) {
+			if (report.popup && report.message) {
+				return axelor.dialogs.box(report.message, {
+					title: report.title
+				});
+			} else if (report.stacktrace) {
 				message = report.message || report.string;
 				exception = report['class'] || '';
 				

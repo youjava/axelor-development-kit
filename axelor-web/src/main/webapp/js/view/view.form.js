@@ -693,10 +693,17 @@ function FormViewCtrl($scope, $element) {
 		if (!$scope.record) return {};
 		var fields = _.keys($scope.fields);
 		var extra = _.chain($scope.fields_view)
-					  .filter(function(f){ return f.name && !_.contains(fields, f.name); })
+					  .filter(function(f) { return f.name && !_.contains(fields, f.name); })
 					  .pluck('name')
 					  .compact()
 					  .value();
+
+		if ($scope._model === 'com.axelor.auth.db.User') {
+			extra = extra.filter(function (n) {
+				return ['change', 'oldPassword', 'newPassword', 'chkPassword'].indexOf(n) === -1;
+			});
+		}
+
 		return _.pick($scope.record, extra);
 	};
 
@@ -803,7 +810,9 @@ function FormViewCtrl($scope, $element) {
 				return;
 			}
 			ds.removeAll([record]).success(function(records, page){
-				$scope.switchBack();
+				if ($scope.switchBack() === false) {
+					$scope.onNew();
+				};
 			});
 		});
 	};
@@ -902,17 +911,20 @@ function FormViewCtrl($scope, $element) {
 		if (__switchBack) {
 			return $scope.switchTo(__switchBack);
 		}
+		return false;
 	};
 
 	$scope.switchTo = function(type, callback) {
-		$scope.confirmDirty(function() {
-			$scope.setEditable(false);
-			$scope.editRecord(null);
-			__switchTo(type, function () {
-				$scope.$locationChangeOff();
-				if (callback) {
-					callback();
-				}
+		$scope.waitForActions(function () {
+			$scope.confirmDirty(function() {
+				$scope.setEditable(false);
+				$scope.editRecord(null);
+					__switchTo(type, function () {
+						$scope.$locationChangeOff();
+						if (callback) {
+							callback();
+						}
+					});
 			});
 		});
 	};
@@ -1212,7 +1224,7 @@ ui.formBuild = function (scope, schema, fields) {
 				this.items = attrs.items = null;
 			}
 
-			if (attrs.editor && attrs.target) {
+			if ((attrs.editor || attrs.viewer) && attrs.target) {
 				type = 'inline-' + type;
 			}
 

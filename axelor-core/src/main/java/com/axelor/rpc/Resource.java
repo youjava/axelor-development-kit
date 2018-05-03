@@ -42,12 +42,14 @@ import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.persistence.EntityTransaction;
 import javax.persistence.OptimisticLockException;
+import javax.validation.ValidationException;
 
 import org.hibernate.StaleObjectStateException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.axelor.app.AppSettings;
+import com.axelor.auth.AuthService;
 import com.axelor.auth.AuthUtils;
 import com.axelor.auth.db.User;
 import com.axelor.common.Inflector;
@@ -399,10 +401,14 @@ public class Resource<T extends Model> {
 				item = toMap(item);
 			}
 			if (item instanceof Map) {
-				if (populate) {
-					item = repo.populate((Map) item, request.getContext());
+				Map<String, Object> map = (Map) item;
+				if (User.class.isAssignableFrom(model)) {
+					map.remove("password");
 				}
-				Translator.applyTranslatables((Map) item, model);
+				if (populate) {
+					item = repo.populate(map, request.getContext());
+				}
+				Translator.applyTranslatables(map, model);
 			}
 			jsonData.add(item);
 		}
@@ -720,10 +726,6 @@ public class Resource<T extends Model> {
 				values.put("__actionSelect", toMapCompact(act));
 			}
 		}
-		// don't include password if not requested
-		if (entity instanceof User && !request.getFields().contains("password")) {
-			values.remove("password");
-		}
 
 		data.add(repository.populate(values, request.getContext()));
 		response.setData(data);
@@ -785,6 +787,37 @@ public class Resource<T extends Model> {
 		}
 		return response;
 	}
+	
+	private User changeUserPassword(User user, Map<String, Object> values) {
+		final String oldPassword = (String) values.get("oldPassword");
+		final String newPassword = (String) values.get("newPassword");
+		final String chkPassword = (String) values.get("chkPassword");
+
+		// current user password is required
+		if (StringUtils.isBlank(oldPassword)) {
+			throw new ValidationException("Current user password is not provided.");
+		}
+
+		final User current = AuthUtils.getUser();
+		final AuthService authService = AuthService.getInstance();
+
+		if (!authService.match(oldPassword, current.getPassword())) {
+			throw new ValidationException("Current user password is wrong.");
+		}
+
+		// no password change
+		if (StringUtils.isBlank(newPassword)) {
+			return user;
+		}
+
+		if (!newPassword.equals(chkPassword)) {
+			throw new ValidationException("Confirm password doesn't match with new password.");
+		}
+
+		user.setPassword(authService.encrypt(newPassword));
+
+		return user;
+	}
 
 	@Transactional
 	@SuppressWarnings("all")
@@ -811,7 +844,7 @@ public class Resource<T extends Model> {
 			names = request.getFields().toArray(names);
 		}
 
-		for(Object record : records) {
+		for (Object record : records) {
 
 			if (record == null) {
 				continue;
@@ -833,6 +866,11 @@ public class Resource<T extends Model> {
 
 			if (bean != null && id != null && id > 0L) {
 				security.get().check(JpaSecurity.CAN_WRITE, model, id);
+			}
+
+			// if user, update password
+			if (bean instanceof User) {
+				changeUserPassword((User) bean, (Map) record);
 			}
 
 			bean = JPA.manage(bean);
@@ -915,8 +953,7 @@ public class Resource<T extends Model> {
 		final List<Object> records = request.getRecords();
 
 		if (records == null || records.isEmpty()) {
-			response.setException(new IllegalArgumentException("No records provides."));
-			return response;
+			return response.fail("No records provides.");
 		}
 
 		final List<Model> entities = Lists.newArrayList();
@@ -1136,7 +1173,7 @@ public class Resource<T extends Model> {
 			String name = prop.getName();
 			PropertyType type = prop.getType();
 
-			if (type == PropertyType.BINARY) {
+			if (type == PropertyType.BINARY || prop.isPassword()) {
 				continue;
 			}
 
