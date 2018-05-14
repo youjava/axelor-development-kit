@@ -44,7 +44,9 @@ import javax.mail.MessagingException;
 import javax.mail.Store;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+import javax.mail.search.AndTerm;
 import javax.mail.search.FlagTerm;
+import javax.mail.search.SearchTerm;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,6 +59,7 @@ import com.axelor.db.JPA;
 import com.axelor.db.Model;
 import com.axelor.db.Query;
 import com.axelor.db.mapper.Mapper;
+import com.axelor.i18n.I18n;
 import com.axelor.inject.Beans;
 import com.axelor.mail.ImapAccount;
 import com.axelor.mail.MailBuilder;
@@ -112,6 +115,8 @@ public class MailServiceImpl implements MailService, MailConstants {
 	private ExecutorService executor = Executors.newCachedThreadPool();
 
 	private Logger log = LoggerFactory.getLogger(MailService.class);
+	
+	private static final Object FETCH_LOCK = new Object();
 
 	public MailServiceImpl() {
 	}
@@ -232,7 +237,7 @@ public class MailServiceImpl implements MailService, MailConstants {
 		if (message == null) {
 			return null;
 		}
-		String subject = message.getSubject();
+		String subject = I18n.get(message.getSubject());
 		if (subject != null && entity != null) {
 			try {
 				subject = Mapper.of(entity.getClass()).getNameField().get(entity).toString() + " - " + subject;
@@ -574,8 +579,11 @@ public class MailServiceImpl implements MailService, MailConstants {
 
 		// find all unseen messages
 		final FlagTerm unseen = new FlagTerm(new Flags(Flags.Flag.SEEN), false);
+		final FlagTerm flagged = new FlagTerm(new Flags("fetched"), false);
+		final SearchTerm term = new AndTerm(unseen, flagged);
+
 		final FetchProfile profile = new FetchProfile();
-		final Message[] messages = inbox.search(unseen);
+		final Message[] messages = inbox.search(term);
 
 		profile.add(FetchProfile.Item.ENVELOPE);
 
@@ -589,6 +597,9 @@ public class MailServiceImpl implements MailService, MailConstants {
 				if (entity != null) {
 					repo.save(entity);
 					count += 1;
+				} else {
+					message.setFlag(Flags.Flag.SEEN, false);
+					message.setFlags(new Flags("fetched"), true);
 				}
 			}
 		}
@@ -599,21 +610,20 @@ public class MailServiceImpl implements MailService, MailConstants {
 
 	@Override
 	public void fetch() throws MailException {
-		final MailReader reader = getMailReader();
-		if (reader == null) {
-			return;
-		}
-		final AuditableRunner runner = Beans.get(AuditableRunner.class);
-		runner.run(new Runnable() {
-			@Override
-			public void run() {
+		synchronized (FETCH_LOCK) {
+			final MailReader reader = getMailReader();
+			if (reader == null) {
+				return;
+			}
+			final AuditableRunner runner = Beans.get(AuditableRunner.class);
+			runner.run(() -> {
 				try {
 					fetch(reader);
 				} catch (Exception e) {
 					log.error("Unable to fetch messages", e);
 				}
-			}
-		});
+			});
+		}
 	}
 
 	@Override

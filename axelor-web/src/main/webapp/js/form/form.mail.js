@@ -682,10 +682,20 @@ ui.directive('uiMailEditor', ["$compile", function ($compile) {
 					.appendTo(buttons);
 
 				popup = editor.isolateScope();
-				popup.onSelectFiles = function (files) {
+				popup.onSelectFiles = function (items) {
 					var rec = popup.record || {};
 					var all = rec.files || [];
-					rec.files = all.concat(files);
+					for (var i = 0; i < items.length; i++) {
+						var file = items[i];
+						var fileId = file.metaFile ? file.metaFile.id : file['metaFile.id'];
+						if (file.isDirectory || !fileId) continue;
+						if (_.findWhere(all, {id: fileId})) continue;
+						all.push({
+							id: fileId,
+							fileName: file.fileName
+						});
+					}
+					rec.files = all;
 					popup.record = rec;
 				};
 			}
@@ -832,6 +842,7 @@ ui.formWidget('uiMailComposer', {
 				type: 'comment',
 				parent: parent.id && parent,
 				files: files,
+				subject: email.subject,
 				recipients: recipients
 			}).success(function (res) {
 				var message = _.first(res.data);
@@ -883,7 +894,6 @@ ui.formWidget('uiMailComposer', {
 
 		scope.showEditor = function () {
 			var record = {
-				subject: "Re: " + findName(),
 				body: scope.post,
 				files: scope.files
 			};

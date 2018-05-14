@@ -60,6 +60,7 @@ function BaseCardsCtrl(type, $scope, $element) {
 	};
 
 	$scope.onNew = function () {
+		ds._page.index = -1;
 		$scope.switchTo('form', function (formScope) {
 			formScope.edit(null);
 			formScope.setEditable();
@@ -439,9 +440,8 @@ ui.directive('uiCards', function () {
 					return;
 				}
 				var ds = scope._dataSource;
-				ds.removeAll([record]).success(function(records, page) {
-					var index = scope.records.indexOf(record);
-					scope.records.splice(index, 1);
+				ds.removeAll([record]).success(function() {
+					scope.onRefresh();
 				});
 			});
 		};
